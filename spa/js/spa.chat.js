@@ -49,8 +49,12 @@ spa.chat = (function () {
 
       slider_open_time  : 250,
       slider_close_time : 250,
-      slider_opened_em  : 16,
+      slider_opened_em  : 18,
       slider_closed_em  : 2,
+
+      slider_opened_min_em : 10,
+      window_height_min_em : 20,
+
       slider_opened_title : 'Click to close',
       slider_closed_title : 'Click to open',
 
@@ -69,12 +73,13 @@ spa.chat = (function () {
     jqueryMap = {},
 
     setJqueryMap, getEmSize, setPxSizes, setSliderPosition,
-    onClickToggle, configModule, initModule
+    onClickToggle, configModule, initModule,
+    removeSlider, handleResize
   ;
   // --- END MODULE SCOPE VARIABLES
 
   // --- BEGIN UTILITY METHODS
-  getEmSize = function () {
+  getEmSize = function ( elem ) {
     return Number(
       getComputedStyle( elem, '' ).fontSize.match(/\d*\.?\d*/)[0]
     );
@@ -96,17 +101,24 @@ spa.chat = (function () {
       $sizer  : $slider.find( '.spa-chat-sizer' ),
       $msgs   : $slider.find( '.spa-chat-msgs' ),
       $box    : $slider.find( '.spa-chat-box' ),
-      $input  : $slider.find( '.spa-chat-box input[type=text]' ),
-    }
+      $input  : $slider.find( '.spa-chat-box input[type=text]' )
+    };
   };
   // End DOM method /setJqueryMap/
 
   // Begin DOM method /setPxSizes/
   setPxSizes = function () {
-    var px_per_em, opened_height_em;
+    var px_per_em, window_height_em, opened_height_em;
     px_per_em = getEmSize( jqueryMap.$slider.get(0) );
+    window_height_em = Math.floor(
+      ( $(window).height() / px_per_em ) + 0.5
+    );
 
-    opened_height_em = configMap.slider_opened_em;
+    opened_height_em = (
+      window_height_em > configMap.window_height_min_em
+        ? configMap.slider_opened_em
+        : configMap.slider_opened_min_em
+    );
 
     stateMap.px_per_em = px_per_em;
     stateMap.slider_closed_px = configMap.slider_closed_em * px_per_em;
@@ -182,6 +194,16 @@ spa.chat = (function () {
   // --- END DOM METHODS
 
   // --- BEGIN EVENT HANDLERS
+  onClickToggle = function ( event ) {
+    var set_chat_anchor = configMap.set_chat_anchor;
+    if ( stateMap.position_type === 'opened' ) {
+      set_chat_anchor( 'closed' );
+    }
+    else if ( stateMap.position_type === 'closed' ) {
+      set_chat_anchor( 'opened' );
+    }
+    return false;
+  };
   // --- END EVENT HANDLERS
 
   // Begin callback method /setChatAnchor/
@@ -245,18 +267,80 @@ spa.chat = (function () {
   // Returns   : true on success, false on failure
   // Throws    : none
   //
-  initModule = function ( $container ) {
-    $container.html( configMap.main_html );
-    stateMap.$container = $container;
+  initModule = function ( $append_target ) {
+    $append_target.append( configMap.main_html );
+    stateMap.$append_target = $append_target;
     setJqueryMap();
+    setPxSizes();
+
+    // initialize chat slider to default title and state
+    jqueryMap.$toggle.prop( 'title', configMap.slider_closed_title );
+    jqueryMap.$head.click( onClickToggle );
+    stateMap.position_type = 'closed';
+
     return true;
   };
   // End public method /initModule/
 
+  // Begin public method /removeSlider/
+  // Purpose :
+  //   * Removes chatSlider DOM element
+  //   * Reverts to initial state
+  //   * Removes pointers to callback and other data
+  // Arguments : none
+  // Returns   : true
+  // Throws    : none
+  //
+  removeSlider = function () {
+    // unwind initialization and state
+    // remove DOM container; this removes event bindings too
+    if ( jqueryMap.$slider ) {
+      jqueryMap.$slider.remove();
+      jqueryMap = {};
+    }
+    stateMap.$append_target = null;
+    stateMap.position_type = 'closed';
+
+    // unwind key configurations
+    configMap.chat_model      = null;
+    configMap.people_model    = null;
+    configMap.set_chat_anchor = null;
+
+    return true;
+  };
+  // End public method /removeSlider/
+
+  // Begin public method /handleResize/
+  // Purpose   :
+  //   Given a window resize event, adjust the presentation
+  //   provided by this module if needed
+  // Actions   :
+  //   If the window height or width falls below
+  //   a given threshold, resize the chat slider for the
+  //   reduced window size.
+  // Returns   : Boolean
+  //   * false - resize not considered
+  //   * true  - resize considered
+  // Throws    : none
+  handleResize = function () {
+    // don't do anything if we don't have a slider container
+    if ( ! jqueryMap.$slider ) { return false; }
+
+    setPxSizes();
+    if ( stateMap.position_type === 'opened' ) {
+      jqueryMap.$slider.css({ height : stateMap.slider_opened_px });
+    }
+    return true;
+  };
+  // End public method /handleResize/
+
   // return public methods
   return {
-    configModule : configModule,
-    initModule : initModule
+    setSliderPosition : setSliderPosition,
+    configModule      : configModule,
+    initModule        : initModule,
+    removeSlider      : removeSlider,
+    handleResize      : handleResize
   };
   // --- END PUBLIC MATHODS
 }());
